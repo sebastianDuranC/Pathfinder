@@ -1,0 +1,14 @@
+<Window x:Class="Pathfinder.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pathfinder" Height="820" Width="1280"
+        MinHeight="720" MinWidth="1040"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI Variable Display, Segoe UI"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        TextOptions.TextHintingMode="Fixed">
+    <Grid x:Name="Host" />
+</Window>
