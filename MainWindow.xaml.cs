@@ -320,13 +320,13 @@ public partial class MainWindow : Window
             form.Children.Add(FieldLabel("ROUTE TITLE"));
             var titleBox = Input(draft.Title, 40, FontWeights.Bold);
             titleBox.TextChanged += (_, _) => draft.Title = titleBox.Text;
-            form.Children.Add(titleBox);
+            form.Children.Add(WithPlaceholder(titleBox, "ENTER PATH NAME ..."));
             form.Children.Add(FieldLabel("OVERVIEW"));
             var overviewBox = Input(draft.Overview, 86, FontWeights.Normal);
             overviewBox.AcceptsReturn = true;
             overviewBox.TextWrapping = TextWrapping.Wrap;
             overviewBox.TextChanged += (_, _) => draft.Overview = overviewBox.Text;
-            form.Children.Add(overviewBox);
+            form.Children.Add(WithPlaceholder(overviewBox, "Briefly explain the goal of this route ..."));
             topGrid.Children.Add(form);
 
             var side = PanelCard(12, SoftBrush(), BorderBrush());
@@ -334,14 +334,11 @@ public partial class MainWindow : Window
             var sideStack = new StackPanel();
             
             sideStack.Children.Add(Label("LEVEL", 10, FontWeights.Bold, MutedBrush(), 0, 0, 0, 4));
-            var levelBox = new ComboBox
+            var levelBox = CreateLevelDropdown(string.IsNullOrWhiteSpace(draft.Level) ? "Beginners" : draft.Level, selectedLevel =>
             {
-                ItemsSource = new[] { "Beginners", "Intermediate", "Advanced" },
-                SelectedItem = string.IsNullOrWhiteSpace(draft.Level) ? "Beginners" : draft.Level,
-                Height = 34,
-                FontWeight = FontWeights.Bold
-            };
-            levelBox.SelectionChanged += (_, _) => draft.Level = levelBox.SelectedItem?.ToString() ?? "Beginners";
+                draft.Level = selectedLevel;
+                RenderEditor(draft);
+            });
             sideStack.Children.Add(levelBox);
 
             var actions = new DockPanel { Margin = new Thickness(0, 22, 0, 0) };
@@ -376,12 +373,14 @@ public partial class MainWindow : Window
             }
             moduleRow.Children.Add(AddModuleTile(draft));
 
-            body.Children.Add(new ScrollViewer
+            var horizontalScroll = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 Content = moduleRow
-            });
+            };
+            horizontalScroll.PreviewMouseWheel += RedirectMouseWheel;
+            body.Children.Add(horizontalScroll);
         });
     }
 
@@ -403,13 +402,13 @@ public partial class MainWindow : Window
         };
 
         var stack = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
-        var gripper = Label("\uE76C", 12, FontWeights.Bold, MutedBrush(), vertical: VerticalAlignment.Center);
-        gripper.Cursor = Cursors.SizeAll;
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10), LastChildFill = false };
+        var gripper = CreateGripHorizontalIcon(MutedBrush(), 18);
         gripper.PreviewMouseMove += (_, args) => StartModuleDrag(card, args);
+        DockPanel.SetDock(gripper, Dock.Left);
         header.Children.Add(gripper);
         
-        var delete = IconButton("\uE711", "Eliminar modulo", SoftBrush(), MutedBrush(), 28);
+        var delete = IconButton("\uE74D", "Eliminar modulo", SoftBrush(), MutedBrush(), 28);
         delete.Height = 28;
         delete.Click += (_, _) =>
         {
@@ -439,6 +438,7 @@ public partial class MainWindow : Window
             MaxHeight = 320,
             Margin = new Thickness(0, 0, 0, 12)
         };
+        sourcesScroll.PreviewMouseWheel += RedirectMouseWheel;
         stack.Children.Add(sourcesScroll);
 
         var add = Button("+ ADD LINK", SoftBrush(), MutedBrush());
@@ -473,26 +473,23 @@ public partial class MainWindow : Window
         };
 
         var stack = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var gripper = Label("\uE76C", 11, FontWeights.Bold, MutedBrush(), 0, 0, 8, 0, vertical: VerticalAlignment.Center);
-        gripper.Cursor = Cursors.SizeAll;
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6), LastChildFill = false };
+        
+        var gripper = CreateGripHorizontalIcon(MutedBrush(), 14);
         gripper.PreviewMouseMove += (_, args) => StartSourceDrag(card, args);
+        DockPanel.SetDock(gripper, Dock.Left);
         header.Children.Add(gripper);
 
-        var kind = new ComboBox
+        var kind = CreateStyledDropdown(source.Kind, selectedKind =>
         {
-            ItemsSource = Enum.GetValues<SourceKind>(),
-            SelectedItem = source.Kind,
-            Height = 28,
-            Width = 96,
-            FontSize = 11,
-            FontWeight = FontWeights.Bold
-        };
-        kind.SelectionChanged += (_, _) => source.Kind = (SourceKind)(kind.SelectedItem ?? SourceKind.Link);
+            source.Kind = selectedKind;
+            RenderEditor(draft);
+        });
+        DockPanel.SetDock(kind, Dock.Left);
         header.Children.Add(kind);
 
-        var delete = IconButton("\uE711", "Eliminar fuente", SoftBrush(), MutedBrush(), 28);
-        delete.Height = 28;
+        var delete = IconButton("\uE74D", "Eliminar fuente", SoftBrush(), MutedBrush(), 26);
+        delete.Height = 26;
         delete.Click += (_, _) =>
         {
             module.Sources.Remove(source);
@@ -909,15 +906,15 @@ public partial class MainWindow : Window
     private static LearningRoute NewRoute() =>
         new()
         {
-            Title = "New Learning Route",
-            Overview = "Describe what this roadmap will teach you and what result you expect.",
+            Title = "",
+            Overview = "",
             Audience = "Juniors",
             Level = "Beginners",
             Modules =
             [
                 new LearningModule
                 {
-                    Title = "First Module",
+                    Title = "",
                     Sources =
                     [
                         new LearningSource { Kind = SourceKind.Link }
@@ -1486,6 +1483,226 @@ public partial class MainWindow : Window
     private Brush DarkFieldBrush() => Brush("#1E2B45");
     private static Brush TransparentBrush() => Brushes.Transparent;
     private static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+
+    private static FrameworkElement CreateGripHorizontalIcon(Brush brush, double size = 18)
+    {
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        var points = new[]
+        {
+            new Point(5, 9), new Point(12, 9), new Point(19, 9),
+            new Point(5, 15), new Point(12, 15), new Point(19, 15)
+        };
+
+        foreach (var pt in points)
+        {
+            var ellipse = new System.Windows.Shapes.Ellipse
+            {
+                Width = 2.5,
+                Height = 2.5,
+                Fill = brush
+            };
+            Canvas.SetLeft(ellipse, pt.X - 1.25);
+            Canvas.SetTop(ellipse, pt.Y - 1.25);
+            canvas.Children.Add(ellipse);
+        }
+
+        var viewbox = new Viewbox
+        {
+            Width = size,
+            Height = size,
+            Child = canvas
+        };
+
+        return new Border
+        {
+            Background = Brushes.Transparent,
+            Width = size,
+            Height = size,
+            Child = viewbox,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = Cursors.SizeAll
+        };
+    }
+
+    private Button CreateStyledDropdown(SourceKind currentKind, Action<SourceKind> onSelected)
+    {
+        var button = new Button
+        {
+            Height = 26,
+            Width = 96,
+            Background = SoftBrush(),
+            Foreground = PrimaryBrush(),
+            BorderBrush = PrimaryBrush(),
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand,
+            Template = CreateButtonTemplate(new CornerRadius(6))
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+
+        var text = Label(currentKind.ToString().ToUpperInvariant(), 10, FontWeights.Bold, PrimaryBrush(), horizontal: HorizontalAlignment.Left, vertical: VerticalAlignment.Center);
+        text.Margin = new Thickness(8, 0, 0, 0);
+        Grid.SetColumn(text, 0);
+        grid.Children.Add(text);
+
+        var arrow = new TextBlock
+        {
+            Text = "\uE70D",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 8,
+            Foreground = PrimaryBrush(),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(arrow, 1);
+        grid.Children.Add(arrow);
+
+        button.Content = grid;
+
+        button.Click += (s, e) =>
+        {
+            var menu = new ContextMenu
+            {
+                Background = CardBrush(),
+                BorderBrush = BorderBrush(),
+                BorderThickness = new Thickness(1)
+            };
+
+            foreach (var kind in Enum.GetValues<SourceKind>())
+            {
+                var item = new MenuItem
+                {
+                    Header = kind.ToString().ToUpperInvariant(),
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 11,
+                    Foreground = TextBrush(),
+                    Height = 28
+                };
+                item.Click += (_, _) => onSelected(kind);
+                menu.Items.Add(item);
+            }
+
+            menu.PlacementTarget = button;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        };
+
+        button.MouseEnter += (s, e) =>
+        {
+            button.Background = PrimaryBrush();
+            text.Foreground = Brushes.White;
+            arrow.Foreground = Brushes.White;
+        };
+        button.MouseLeave += (s, e) =>
+        {
+            button.Background = SoftBrush();
+            text.Foreground = PrimaryBrush();
+            arrow.Foreground = PrimaryBrush();
+        };
+
+        return button;
+    }
+
+    private Button CreateLevelDropdown(string currentLevel, Action<string> onSelected)
+    {
+        var button = new Button
+        {
+            Height = 34,
+            Background = SoftBrush(),
+            Foreground = PrimaryBrush(),
+            BorderBrush = PrimaryBrush(),
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand,
+            Template = CreateButtonTemplate(new CornerRadius(6))
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+
+        var text = Label(currentLevel, 12, FontWeights.Bold, PrimaryBrush(), horizontal: HorizontalAlignment.Left, vertical: VerticalAlignment.Center);
+        text.Margin = new Thickness(10, 0, 0, 0);
+        Grid.SetColumn(text, 0);
+        grid.Children.Add(text);
+
+        var arrow = new TextBlock
+        {
+            Text = "\uE70D",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 10,
+            Foreground = PrimaryBrush(),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(arrow, 1);
+        grid.Children.Add(arrow);
+
+        button.Content = grid;
+
+        button.Click += (s, e) =>
+        {
+            var menu = new ContextMenu
+            {
+                Background = CardBrush(),
+                BorderBrush = BorderBrush(),
+                BorderThickness = new Thickness(1)
+            };
+
+            foreach (var level in new[] { "Beginners", "Intermediate", "Advanced" })
+             {
+                 var item = new MenuItem
+                 {
+                     Header = level.ToUpperInvariant(),
+                     FontWeight = FontWeights.Bold,
+                     FontSize = 11,
+                     Foreground = TextBrush(),
+                     Height = 32
+                 };
+                 item.Click += (_, _) => onSelected(level);
+                 menu.Items.Add(item);
+             }
+
+             menu.PlacementTarget = button;
+             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+             menu.IsOpen = true;
+         };
+
+         button.MouseEnter += (s, e) =>
+         {
+             button.Background = PrimaryBrush();
+             text.Foreground = Brushes.White;
+             arrow.Foreground = Brushes.White;
+         };
+         button.MouseLeave += (s, e) =>
+         {
+             button.Background = SoftBrush();
+             text.Foreground = PrimaryBrush();
+             arrow.Foreground = PrimaryBrush();
+         };
+
+         return button;
+     }
+
+    private static void RedirectMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is ScrollViewer sv)
+        {
+            var canScrollVertically = sv.ScrollableHeight > 0;
+            if (!canScrollVertically)
+            {
+                e.Handled = true;
+                var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+                {
+                    RoutedEvent = UIElement.MouseWheelEvent,
+                    Source = sender
+                };
+                var parent = VisualTreeHelper.GetParent(sv) as UIElement;
+                parent?.RaiseEvent(eventArg);
+            }
+        }
+    }
 
     private static string Trim(string value, int max) =>
         value.Length <= max ? value : $"{value[..max]}...";
