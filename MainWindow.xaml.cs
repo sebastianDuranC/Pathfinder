@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly LearningRouteService _routeService;
     private bool _isDarkMode;
     private string _searchText = "";
+    private int _currentRouteId;
 
     public MainWindow()
     {
@@ -28,790 +29,6 @@ public partial class MainWindow : Window
         _routeService = new LearningRouteService(new SqliteLearningRouteRepository());
         _routeService.Initialize();
         RenderDashboard();
-    }
-
-    private void RenderDashboard()
-    {
-        RenderShell("DASHBOARD", body =>
-        {
-            var heroGradient = new LinearGradientBrush
-            {
-                StartPoint = new Point(0, 0),
-                EndPoint = new Point(1, 1)
-            };
-            heroGradient.GradientStops.Add(new GradientStop(Color.FromRgb(79, 70, 229), 0.0)); // Indigo 600
-            heroGradient.GradientStops.Add(new GradientStop(Color.FromRgb(124, 58, 237), 1.0)); // Violet 600
-
-            var hero = PanelCard(16, heroGradient, BorderBrush());
-            hero.Margin = new Thickness(0, 0, 0, 36);
-            var heroGrid = new Grid();
-            heroGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            heroGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
-
-            var heroText = new StackPanel();
-            heroText.Children.Add(Label("MY ACTIVE PATHS", 30, FontWeights.ExtraBold, Brushes.White));
-            heroText.Children.Add(Label("Continue your learning journey across the technical landscape.", 13, FontWeights.Medium, new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)), 0, 6, 0, 0));
-            heroGrid.Children.Add(heroText);
-
-            var searchBox = new TextBox
-            {
-                Text = _searchText,
-                Height = 40,
-                Padding = new Thickness(16, 8, 16, 8),
-                FontSize = 13,
-                FontWeight = FontWeights.SemiBold,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
-                Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-                Foreground = Brushes.White
-            };
-
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.Name = "border";
-            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
-            borderFactory.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
-            borderFactory.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
-            borderFactory.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
-            borderFactory.SetValue(Border.SnapsToDevicePixelsProperty, true);
-
-            var scrollFactory = new FrameworkElementFactory(typeof(ScrollViewer));
-            scrollFactory.Name = "PART_ContentHost";
-            borderFactory.AppendChild(scrollFactory);
-
-            var template = new ControlTemplate(typeof(TextBox));
-            template.VisualTree = borderFactory;
-            searchBox.Template = template;
-
-            searchBox.GotFocus += (s, e) =>
-            {
-                searchBox.Background = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255));
-                searchBox.BorderBrush = Brushes.White;
-            };
-            searchBox.LostFocus += (s, e) =>
-            {
-                searchBox.Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
-                searchBox.BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
-            };
-
-            var searchBoxGrid = new Grid { VerticalAlignment = VerticalAlignment.Center };
-            var searchHint = new TextBlock
-            {
-                Text = "Search paths...",
-                Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
-                FontSize = 13,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(16, 0, 16, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                IsHitTestVisible = false,
-                Opacity = 0.8
-            };
-
-            void UpdateSearchHint()
-            {
-                searchHint.Visibility = string.IsNullOrWhiteSpace(searchBox.Text) && !searchBox.IsKeyboardFocused
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            }
-
-            searchBox.TextChanged += (_, _) => UpdateSearchHint();
-            searchBox.GotFocus += (_, _) => UpdateSearchHint();
-            searchBox.LostFocus += (_, _) => UpdateSearchHint();
-            searchBoxGrid.Loaded += (_, _) => UpdateSearchHint();
-
-            searchBoxGrid.Children.Add(searchBox);
-            searchBoxGrid.Children.Add(searchHint);
-
-            Grid.SetColumn(searchBoxGrid, 1);
-            heroGrid.Children.Add(searchBoxGrid);
-            hero.Child = heroGrid;
-            body.Children.Add(hero);
-
-            var cards = new WrapPanel { ItemWidth = 388, ItemHeight = 418 };
-            body.Children.Add(cards);
-
-            searchBox.TextChanged += (_, _) =>
-            {
-                _searchText = searchBox.Text;
-                RenderDashboardCards();
-            };
-
-            void RenderDashboardCards()
-            {
-                cards.Children.Clear();
-                var routes = _routeService.GetRoutes()
-                    .Where(route => string.IsNullOrWhiteSpace(_searchText) ||
-                                    route.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
-                                    route.Overview.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                foreach (var route in routes)
-                {
-                    cards.Children.Add(RouteCard(route));
-                }
-
-                cards.Children.Add(CreateRouteTile());
-            }
-
-            RenderDashboardCards();
-        });
-    }
-
-    private Border RouteCard(LearningRoute route)
-    {
-        var card = PanelCard(16, CardBrush(), BorderBrush());
-        card.Margin = new Thickness(0, 0, 28, 28);
-        card.Width = 360;
-        card.Height = 390;
-
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(154) });
-        root.RowDefinitions.Add(new RowDefinition());
-
-        var isBeginner = string.Equals(route.Level, "Beginners", StringComparison.OrdinalIgnoreCase);
-        var isAdvanced = string.Equals(route.Level, "Advanced", StringComparison.OrdinalIgnoreCase);
-
-        var previewGradient = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(1, 1)
-        };
-        
-        if (isBeginner)
-        {
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(14, 165, 233), 0.0)); // Sky 500
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(37, 99, 235), 1.0)); // Blue 600
-        }
-        else if (isAdvanced)
-        {
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(236, 72, 153), 0.0)); // Pink 500
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(124, 58, 237), 1.0)); // Violet 600
-        }
-        else // Intermediate
-        {
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(99, 102, 241), 0.0)); // Indigo 500
-            previewGradient.GradientStops.Add(new GradientStop(Color.FromRgb(139, 92, 246), 1.0)); // Purple 500
-        }
-
-        var preview = new Border
-        {
-            Background = previewGradient,
-            CornerRadius = new CornerRadius(15, 15, 0, 0),
-            ClipToBounds = true
-        };
-        
-        var previewGrid = new Grid();
-        previewGrid.Children.Add(Label(route.Modules.Count == 1 ? "1 MODULE" : $"{route.Modules.Count} MODULES", 10, FontWeights.Bold, Brushes.White, 18, 18, 0, 0));
-        previewGrid.Children.Add(Label("PATH", 36, FontWeights.ExtraBold, new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), 0, 0, 0, 0, HorizontalAlignment.Center, VerticalAlignment.Center));
-        
-        var previewActions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 12, 12, 0)
-        };
-        
-        var previewView = IconButton("\uE8A7", "Visualizar ruta", new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), Brushes.White, 32);
-        var previewDelete = IconButton("\uE74D", "Eliminar ruta", new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), Brushes.White, 32);
-        previewDelete.Margin = new Thickness(8, 0, 0, 0);
-        previewView.Click += (_, _) => RenderDetail(route.Id);
-        previewDelete.Click += (_, _) =>
-        {
-            if (MessageBox.Show("Eliminar esta ruta?", "Pathfinder", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
-                _routeService.DeleteRoute(route.Id);
-                RenderDashboard();
-            }
-        };
-        previewActions.Children.Add(previewView);
-        previewActions.Children.Add(previewDelete);
-        previewGrid.Children.Add(previewActions);
-        preview.Child = previewGrid;
-        root.Children.Add(preview);
-
-        var content = new StackPanel { Margin = new Thickness(22, 20, 22, 18) };
-        Grid.SetRow(content, 1);
-        content.Children.Add(Pill(route.Level.ToUpperInvariant(), PrimaryBrush(), SoftBrush()));
-        content.Children.Add(Label(route.Title, 20, FontWeights.Bold, TextBrush(), 0, 12, 0, 6));
-        content.Children.Add(Label(Trim(route.Overview, 112), 13, FontWeights.Medium, MutedBrush()));
-        content.Children.Add(ProgressBar(route.Progress, 0, 20, 0, 16));
-
-        var footer = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
-        var view = Button("VIEW ROUTE", PrimaryBrush(), Brushes.White);
-        view.Click += (_, _) => RenderDetail(route.Id);
-        DockPanel.SetDock(view, Dock.Left);
-        footer.Children.Add(view);
-
-        var edit = IconButton("\uE70F", "Editar ruta", SoftBrush(), TextBrush());
-        edit.Margin = new Thickness(10, 0, 0, 0);
-        edit.Click += (_, _) => RenderEditor(CloneRoute(route));
-        DockPanel.SetDock(edit, Dock.Right);
-        footer.Children.Add(edit);
-
-        content.Children.Add(footer);
-        root.Children.Add(content);
-        card.Child = root;
-
-        SetupCardHover(card, CardBrush(), BorderBrush(), CardBrush(), PrimaryBrush());
-        return card;
-    }
-
-    private Border CreateRouteTile()
-    {
-        var tile = PanelCard(16, TransparentBrush(), BorderBrush());
-        tile.Margin = new Thickness(0, 0, 28, 28);
-        tile.Width = 360;
-        tile.Height = 390;
-        tile.BorderThickness = new Thickness(0); // we use custom rectangle for dashed border
-
-        var grid = new Grid();
-        var dashArray = new DoubleCollection { 4, 3 };
-        var dashRect = new System.Windows.Shapes.Rectangle
-        {
-            Stroke = new SolidColorBrush(_isDarkMode ? Color.FromRgb(51, 65, 85) : Color.FromRgb(203, 213, 225)),
-            StrokeThickness = 1.5,
-            StrokeDashArray = dashArray,
-            RadiusX = 16,
-            RadiusY = 16,
-            Margin = new Thickness(-22) // offset padding from PanelCard
-        };
-        grid.Children.Add(dashRect);
-
-        var stack = new StackPanel
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        stack.Children.Add(Label("+", 40, FontWeights.Light, MutedBrush(), horizontal: HorizontalAlignment.Center));
-        stack.Children.Add(Label("CREATE NEW ROUTE", 14, FontWeights.Bold, MutedBrush(), horizontal: HorizontalAlignment.Center));
-        grid.Children.Add(stack);
-        tile.Child = grid;
-        tile.Cursor = Cursors.Hand;
-        tile.MouseLeftButtonUp += (_, _) => RenderEditor(NewRoute());
-
-        SetupCardHover(tile, TransparentBrush(), BorderBrush(), SoftBrush(), PrimaryBrush());
-        tile.MouseEnter += (s, e) =>
-        {
-            dashRect.Stroke = PrimaryBrush();
-            dashRect.StrokeThickness = 2;
-        };
-        tile.MouseLeave += (s, e) =>
-        {
-            dashRect.Stroke = new SolidColorBrush(_isDarkMode ? Color.FromRgb(51, 65, 85) : Color.FromRgb(203, 213, 225));
-            dashRect.StrokeThickness = 1.5;
-        };
-
-        return tile;
-    }
-
-    private void RenderEditor(LearningRoute draft)
-    {
-        RenderShell(draft.Id == 0 ? "NEW PATH" : "EDIT PATH", body =>
-        {
-            var top = PanelCard(16, CardBrush(), BorderBrush());
-            top.Margin = new Thickness(0, 0, 0, 30);
-            var topGrid = new Grid { Margin = new Thickness(0) };
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
-            top.Child = topGrid;
-
-            var form = new StackPanel { Margin = new Thickness(0, 0, 24, 0) };
-            form.Children.Add(FieldLabel("ROUTE TITLE"));
-            var titleBox = Input(draft.Title, 40, FontWeights.Bold);
-            titleBox.TextChanged += (_, _) => draft.Title = titleBox.Text;
-            form.Children.Add(WithPlaceholder(titleBox, "ENTER PATH NAME ..."));
-            form.Children.Add(FieldLabel("OVERVIEW"));
-            var overviewBox = Input(draft.Overview, 86, FontWeights.Normal);
-            overviewBox.AcceptsReturn = true;
-            overviewBox.TextWrapping = TextWrapping.Wrap;
-            overviewBox.TextChanged += (_, _) => draft.Overview = overviewBox.Text;
-            form.Children.Add(WithPlaceholder(overviewBox, "Briefly explain the goal of this route ..."));
-            topGrid.Children.Add(form);
-
-            var side = PanelCard(12, SoftBrush(), BorderBrush());
-            side.Padding = new Thickness(18);
-            var sideStack = new StackPanel();
-            
-            sideStack.Children.Add(Label("LEVEL", 10, FontWeights.Bold, MutedBrush(), 0, 0, 0, 4));
-            var levelBox = CreateLevelDropdown(string.IsNullOrWhiteSpace(draft.Level) ? "Beginners" : draft.Level, selectedLevel =>
-            {
-                draft.Level = selectedLevel;
-                RenderEditor(draft);
-            });
-            sideStack.Children.Add(levelBox);
-
-            var actions = new DockPanel { Margin = new Thickness(0, 22, 0, 0) };
-            var cancel = Button("CANCEL", BorderBrush(), TextBrush());
-            cancel.Width = 88;
-            cancel.Click += (_, _) => RenderDashboard();
-            DockPanel.SetDock(cancel, Dock.Left);
-            actions.Children.Add(cancel);
-
-            var save = Button("PUBLISH", PrimaryBrush(), Brushes.White);
-            save.Width = 104;
-            save.Click += (_, _) => SaveDraft(draft);
-            DockPanel.SetDock(save, Dock.Right);
-            actions.Children.Add(save);
-            sideStack.Children.Add(actions);
-            side.Child = sideStack;
-            Grid.SetColumn(side, 1);
-            topGrid.Children.Add(side);
-            body.Children.Add(top);
-
-            var rowHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 20) };
-            rowHeader.Children.Add(Label("ROADMAP ARCHITECTURE", 18, FontWeights.Bold, TextBrush()));
-            var count = Label($"{draft.Modules.Count} MODULES", 10, FontWeights.Bold, MutedBrush(), horizontal: HorizontalAlignment.Right);
-            DockPanel.SetDock(count, Dock.Right);
-            rowHeader.Children.Add(count);
-            body.Children.Add(rowHeader);
-
-            var moduleRow = new StackPanel { Orientation = Orientation.Horizontal };
-            foreach (var module in draft.Modules)
-            {
-                moduleRow.Children.Add(ModuleEditorCard(draft, module));
-            }
-            moduleRow.Children.Add(AddModuleTile(draft));
-
-            var horizontalScroll = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = moduleRow
-            };
-            horizontalScroll.PreviewMouseWheel += RedirectMouseWheel;
-            body.Children.Add(horizontalScroll);
-        });
-    }
-
-    private Border ModuleEditorCard(LearningRoute draft, LearningModule module)
-    {
-        var card = PanelCard(12, CardBrush(), BorderBrush());
-        card.Width = 250;
-        card.MinHeight = 300;
-        card.Margin = new Thickness(0, 0, 22, 0);
-        card.AllowDrop = true;
-        card.Tag = module;
-        card.Drop += (_, args) =>
-        {
-            if (args.Data.GetData(typeof(LearningModule)) is LearningModule dragged && dragged != module)
-            {
-                MoveItem(draft.Modules, dragged, draft.Modules.IndexOf(module));
-                RenderEditor(draft);
-            }
-        };
-
-        var stack = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10), LastChildFill = false };
-        var gripper = CreateGripHorizontalIcon(MutedBrush(), 18);
-        gripper.PreviewMouseMove += (_, args) => StartModuleDrag(card, args);
-        DockPanel.SetDock(gripper, Dock.Left);
-        header.Children.Add(gripper);
-        
-        var delete = IconButton("\uE74D", "Eliminar modulo", SoftBrush(), MutedBrush(), 28);
-        delete.Height = 28;
-        delete.Click += (_, _) =>
-        {
-            draft.Modules.Remove(module);
-            RenderEditor(draft);
-        };
-        DockPanel.SetDock(delete, Dock.Right);
-        header.Children.Add(delete);
-        stack.Children.Add(header);
-
-        var titleBox = Input(module.Title, 34, FontWeights.Bold);
-        titleBox.TextChanged += (_, _) => module.Title = titleBox.Text;
-        stack.Children.Add(WithPlaceholder(titleBox, "Module title..."));
-        stack.Children.Add(Separator());
-
-        var sourcesHost = new StackPanel();
-        foreach (var source in module.Sources)
-        {
-            sourcesHost.Children.Add(SourceEditorCard(draft, module, source));
-        }
-
-        var sourcesScroll = new ScrollViewer
-        {
-            Content = sourcesHost,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = 320,
-            Margin = new Thickness(0, 0, 0, 12)
-        };
-        sourcesScroll.PreviewMouseWheel += RedirectMouseWheel;
-        stack.Children.Add(sourcesScroll);
-
-        var add = Button("+ ADD LINK", SoftBrush(), MutedBrush());
-        add.Height = 36;
-        add.Margin = new Thickness(0, 6, 0, 0);
-        add.Click += (_, _) =>
-        {
-            module.Sources.Add(new LearningSource { Kind = SourceKind.Link });
-            RenderEditor(draft);
-        };
-        stack.Children.Add(add);
-        card.Child = stack;
-
-        SetupCardHover(card, CardBrush(), BorderBrush(), CardBrush(), PrimaryBrush(), scaleOnHover: false);
-        return card;
-    }
-
-    private Border SourceEditorCard(LearningRoute draft, LearningModule module, LearningSource source)
-    {
-        var card = PanelCard(8, SoftBrush(), BorderBrush());
-        card.Margin = new Thickness(0, 0, 0, 10);
-        card.Padding = new Thickness(12);
-        card.AllowDrop = true;
-        card.Tag = source;
-        card.Drop += (_, args) =>
-        {
-            if (args.Data.GetData(typeof(LearningSource)) is LearningSource dragged && dragged != source && module.Sources.Contains(dragged))
-            {
-                MoveItem(module.Sources, dragged, module.Sources.IndexOf(source));
-                RenderEditor(draft);
-            }
-        };
-
-        var stack = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6), LastChildFill = false };
-        
-        var gripper = CreateGripHorizontalIcon(MutedBrush(), 14);
-        gripper.PreviewMouseMove += (_, args) => StartSourceDrag(card, args);
-        DockPanel.SetDock(gripper, Dock.Left);
-        header.Children.Add(gripper);
-
-        var kind = CreateStyledDropdown(source.Kind, selectedKind =>
-        {
-            source.Kind = selectedKind;
-            RenderEditor(draft);
-        });
-        DockPanel.SetDock(kind, Dock.Left);
-        header.Children.Add(kind);
-
-        var delete = IconButton("\uE74D", "Eliminar fuente", SoftBrush(), MutedBrush(), 26);
-        delete.Height = 26;
-        delete.Click += (_, _) =>
-        {
-            module.Sources.Remove(source);
-            RenderEditor(draft);
-        };
-        DockPanel.SetDock(delete, Dock.Right);
-        header.Children.Add(delete);
-        stack.Children.Add(header);
-
-        var titleBox = Input(source.Title, 30, FontWeights.Bold);
-        titleBox.Margin = new Thickness(0, 8, 0, 8);
-        titleBox.TextChanged += (_, _) => source.Title = titleBox.Text;
-        stack.Children.Add(WithPlaceholder(titleBox, "TITLE..."));
-
-        var locationBox = Input(source.Location, 28, FontWeights.Normal);
-        locationBox.FontSize = 11;
-        locationBox.TextChanged += (_, _) => source.Location = locationBox.Text;
-        stack.Children.Add(WithPlaceholder(locationBox, "resource-url.com"));
-
-        card.Child = stack;
-
-        SetupCardHover(card, SoftBrush(), BorderBrush(), SoftBrush(), PrimaryBrush(), scaleOnHover: false);
-        return card;
-    }
-
-    private Border AddModuleTile(LearningRoute draft)
-    {
-        var tile = PanelCard(12, TransparentBrush(), BorderBrush());
-        tile.Width = 250;
-        tile.Height = 300;
-        tile.BorderThickness = new Thickness(0);
-
-        var grid = new Grid();
-        var dashArray = new DoubleCollection { 4, 3 };
-        var dashRect = new System.Windows.Shapes.Rectangle
-        {
-            Stroke = new SolidColorBrush(_isDarkMode ? Color.FromRgb(51, 65, 85) : Color.FromRgb(203, 213, 225)),
-            StrokeThickness = 1.5,
-            StrokeDashArray = dashArray,
-            RadiusX = 12,
-            RadiusY = 12,
-            Margin = new Thickness(-22)
-        };
-        grid.Children.Add(dashRect);
-
-        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        stack.Children.Add(Label("+", 34, FontWeights.Light, MutedBrush(), horizontal: HorizontalAlignment.Center));
-        stack.Children.Add(Label("ADD MODULE", 13, FontWeights.Bold, MutedBrush(), horizontal: HorizontalAlignment.Center));
-        grid.Children.Add(stack);
-        tile.Child = grid;
-        tile.Cursor = Cursors.Hand;
-
-        tile.MouseLeftButtonUp += (_, _) =>
-        {
-            draft.Modules.Add(new LearningModule
-            {
-                Title = $"Module {draft.Modules.Count + 1}",
-                Sources = [new LearningSource { Kind = SourceKind.Link }]
-            });
-            RenderEditor(draft);
-        };
-
-        SetupCardHover(tile, TransparentBrush(), BorderBrush(), SoftBrush(), PrimaryBrush());
-        tile.MouseEnter += (s, e) =>
-        {
-            dashRect.Stroke = PrimaryBrush();
-            dashRect.StrokeThickness = 2;
-        };
-        tile.MouseLeave += (s, e) =>
-        {
-            dashRect.Stroke = new SolidColorBrush(_isDarkMode ? Color.FromRgb(51, 65, 85) : Color.FromRgb(203, 213, 225));
-            dashRect.StrokeThickness = 1.5;
-        };
-
-        return tile;
-    }
-
-    private static (string Glyph, string LabelText, Brush Color) GetSourceKindMetadata(SourceKind kind)
-    {
-        return kind switch
-        {
-            SourceKind.Video => ("\uE714", "VIDEO", Brush("#EF4444")),  // Red
-            SourceKind.Docs => ("\uE736", "DOCUMENTO", Brush("#3B82F6")), // Blue
-            SourceKind.Link => ("\uE71B", "ENLACE WEB", Brush("#10B981")), // Emerald
-            SourceKind.File => ("\uE8A5", "ARCHIVO", Brush("#F59E0B")),  // Amber
-            _ => ("\uE71B", "RECURSO", Brush("#6366F1"))
-        };
-    }
-
-    private void RenderDetail(int routeId)
-    {
-        var route = _routeService.GetRoute(routeId);
-        if (route is null)
-        {
-            RenderDashboard();
-            return;
-        }
-
-        RenderShell("ROUTE", body =>
-        {
-            var isBeginner = string.Equals(route.Level, "Beginners", StringComparison.OrdinalIgnoreCase);
-            var isAdvanced = string.Equals(route.Level, "Advanced", StringComparison.OrdinalIgnoreCase);
-
-            var bannerGradient = new LinearGradientBrush
-            {
-                StartPoint = new Point(0, 0),
-                EndPoint = new Point(1, 1)
-            };
-            if (isBeginner)
-            {
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(14, 165, 233), 0.0));
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(37, 99, 235), 1.0));
-            }
-            else if (isAdvanced)
-            {
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(236, 72, 153), 0.0));
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(124, 58, 237), 1.0));
-            }
-            else
-            {
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(99, 102, 241), 0.0));
-                bannerGradient.GradientStops.Add(new GradientStop(Color.FromRgb(139, 92, 246), 1.0));
-            }
-
-            var header = PanelCard(16, bannerGradient, BorderBrush());
-            header.Margin = new Thickness(0, 0, 0, 36);
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(310) });
-            header.Child = grid;
-
-            var left = new StackPanel();
-            var back = Button("< DASHBOARD", new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), Brushes.White);
-            back.Width = 142;
-            back.Click += (_, _) => RenderDashboard();
-            left.Children.Add(back);
-            
-            left.Children.Add(Pill(route.Level.ToUpperInvariant(), Brushes.White, new SolidColorBrush(Color.FromArgb(35, 255, 255, 255)), 0, 20, 0, 8));
-            left.Children.Add(Label(route.Title, 36, FontWeights.Bold, Brushes.White));
-            left.Children.Add(Label(route.Overview, 15, FontWeights.Medium, new SolidColorBrush(Color.FromArgb(210, 255, 255, 255)), 0, 10, 18, 0));
-            grid.Children.Add(left);
-
-            var progress = PanelCard(12, CardBrush(), BorderBrush());
-            progress.Width = 290;
-            progress.Height = 112;
-            progress.HorizontalAlignment = HorizontalAlignment.Right;
-            progress.VerticalAlignment = VerticalAlignment.Center;
-            
-            var progressStack = new StackPanel();
-            progressStack.Children.Add(Label("ROUTE COMPLETION", 10, FontWeights.Bold, MutedBrush()));
-            progressStack.Children.Add(Label($"{route.Progress}%", 30, FontWeights.ExtraBold, TextBrush(), 0, 4, 0, 6));
-            progressStack.Children.Add(ProgressBar(route.Progress));
-            progress.Child = progressStack;
-            Grid.SetColumn(progress, 1);
-            grid.Children.Add(progress);
-
-            var configure = Button("CONFIGURE", new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), Brushes.White);
-            configure.Width = 124;
-            configure.HorizontalAlignment = HorizontalAlignment.Right;
-            configure.VerticalAlignment = VerticalAlignment.Top;
-            configure.Click += (_, _) => RenderEditor(CloneRoute(route));
-            grid.Children.Add(configure);
-            body.Children.Add(header);
-
-            for (var i = 0; i < route.Modules.Count; i++)
-            {
-                body.Children.Add(ModuleProgressRow(route.Modules[i], i + 1, route.Modules.Count, route.Id));
-            }
-        });
-    }
-
-    private Grid ModuleProgressRow(LearningModule module, int index, int totalModules, int routeId)
-    {
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 34) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(86) });
-        row.ColumnDefinitions.Add(new ColumnDefinition());
-
-        var leftColGrid = new Grid();
-        if (index < totalModules)
-        {
-            var connector = new Border
-            {
-                Width = 2,
-                Background = _isDarkMode ? Brush("#202E4E") : Brush("#E2E8F0"),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Margin = new Thickness(0, 36, 0, -34)
-            };
-            leftColGrid.Children.Add(connector);
-        }
-
-        var isModuleCompleted = module.Sources.Count > 0 && module.Sources.All(s => s.IsCompleted);
-        var circle = new Border
-        {
-            Width = 54,
-            Height = 54,
-            CornerRadius = new CornerRadius(27),
-            Background = isModuleCompleted ? CompletedBrush() : (index == 1 || !isModuleCompleted ? CardBrush() : SoftBrush()),
-            BorderBrush = isModuleCompleted ? Brush("#10B981") : (index == 1 ? PrimaryBrush() : BorderBrush()),
-            BorderThickness = new Thickness(2),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 6, 0, 0),
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 8,
-                ShadowDepth = 1,
-                Color = isModuleCompleted ? Color.FromRgb(16, 185, 129) : Colors.Black,
-                Opacity = isModuleCompleted ? 0.2 : 0.05
-            }
-        };
-
-        var circleContent = isModuleCompleted 
-            ? Label("\uE73E", 14, FontWeights.Bold, Brush("#10B981"), horizontal: HorizontalAlignment.Center, vertical: VerticalAlignment.Center)
-            : Label(index.ToString("00"), 14, FontWeights.Bold, index == 1 ? PrimaryBrush() : MutedBrush(), horizontal: HorizontalAlignment.Center, vertical: VerticalAlignment.Center);
-
-        if (isModuleCompleted)
-        {
-            circleContent.FontFamily = new FontFamily("Segoe MDL2 Assets");
-        }
-        circle.Child = circleContent;
-        leftColGrid.Children.Add(circle);
-        row.Children.Add(leftColGrid);
-
-        var content = new StackPanel { Margin = new Thickness(18, 8, 0, 0) };
-        Grid.SetColumn(content, 1);
-        content.Children.Add(Label(module.Title, 22, FontWeights.Bold, TextBrush(), 0, 2, 0, 18));
-
-        var sources = new WrapPanel { ItemWidth = 550, ItemHeight = 90 };
-        foreach (var source in module.Sources)
-        {
-            sources.Children.Add(SourceProgressCard(source, routeId));
-        }
-
-        content.Children.Add(sources);
-        row.Children.Add(content);
-        return row;
-    }
-
-    private Border SourceProgressCard(LearningSource source, int routeId)
-    {
-        var card = PanelCard(12, source.IsCompleted ? CompletedBrush() : CardBrush(), BorderBrush());
-        card.Width = 530;
-        card.Height = 74;
-        card.Margin = new Thickness(0, 0, 20, 14);
-        card.Padding = new Thickness(16, 10, 16, 10);
-
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
-
-        var check = new CheckBox
-        {
-            IsChecked = source.IsCompleted,
-            Width = 24,
-            Height = 24,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Cursor = Cursors.Hand
-        };
-        check.Click += (_, _) =>
-        {
-            _routeService.ToggleSourceCompletion(source.Id, check.IsChecked == true);
-            RenderDetail(routeId);
-        };
-        grid.Children.Add(check);
-
-        var meta = GetSourceKindMetadata(source.Kind);
-        
-        var badge = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-        var kindIcon = new TextBlock
-        {
-            Text = meta.Glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 10,
-            Foreground = meta.Color,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 6, 0)
-        };
-        var kindLabel = Label(meta.LabelText, 9, FontWeights.Bold, meta.Color, vertical: VerticalAlignment.Center);
-        badge.Children.Add(kindIcon);
-        badge.Children.Add(kindLabel);
-        
-        var title = Label(source.Title, 15, FontWeights.Bold, source.IsCompleted ? MutedBrush() : TextBrush());
-        if (source.IsCompleted)
-        {
-            title.TextDecorations = TextDecorations.Strikethrough;
-            title.Opacity = 0.6;
-        }
-
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(badge);
-        text.Children.Add(title);
-        
-        Grid.SetColumn(text, 1);
-        grid.Children.Add(text);
-
-        var open = IconButton("\uE8A7", "Abrir fuente", SoftBrush(), TextBrush(), 32);
-        open.Width = 32;
-        open.Height = 32;
-        open.Click += (_, _) => OpenSource(source.Location);
-        Grid.SetColumn(open, 2);
-        grid.Children.Add(open);
-
-        card.Child = grid;
-
-        SetupCardHover(card, source.IsCompleted ? CompletedBrush() : CardBrush(), BorderBrush(), source.IsCompleted ? CompletedBrush() : SoftBrush(), source.IsCompleted ? Brush("#10B981") : PrimaryBrush(), scaleOnHover: false);
-        return card;
-    }
-
-    private void SaveDraft(LearningRoute draft)
-    {
-        try
-        {
-            var routeId = _routeService.SaveRoute(draft);
-            RenderDetail(routeId);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Pathfinder", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
     }
 
     private void RenderShell(string activeSection, Action<StackPanel> renderBody)
@@ -884,14 +101,104 @@ public partial class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center
         };
-        var theme = IconButton(_isDarkMode ? "\uE706" : "\uE708", _isDarkMode ? "Cambiar a modo claro" : "Cambiar a modo nocturno", CardBrush(), TextBrush(), 42);
-        theme.Margin = new Thickness(0, 0, 12, 0);
-        theme.Click += (_, _) =>
+        var toggle = new Border
         {
-            _isDarkMode = !_isDarkMode;
-            RenderDashboard();
+            Width = 76,
+            Height = 36,
+            CornerRadius = new CornerRadius(18),
+            Background = _isDarkMode ? Brush("#1E293B") : Brush("#F1F5F9"),
+            BorderBrush = _isDarkMode ? Brush("#334155") : Brush("#E2E8F0"),
+            BorderThickness = new Thickness(1.5),
+            Cursor = Cursors.Hand,
+            Margin = new Thickness(0, 0, 12, 0)
         };
-        right.Children.Add(theme);
+
+        var toggleGrid = new Grid();
+        
+        var thumb = new Border
+        {
+            Width = 30,
+            Height = 30,
+            CornerRadius = new CornerRadius(15),
+            Background = Brushes.White,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(2, 0, 2, 0),
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 4,
+                ShadowDepth = 1,
+                Color = Colors.Black,
+                Opacity = 0.12
+            }
+        };
+        var translate = new TranslateTransform();
+        thumb.RenderTransform = translate;
+        translate.X = _isDarkMode ? 40 : 0;
+        
+        toggleGrid.Children.Add(thumb);
+
+        var sunIcon = new TextBlock
+        {
+            Text = "\uE706",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            FontWeight = FontWeights.Bold,
+            Foreground = _isDarkMode ? Brush("#64748B") : Brush("#0F172A"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        
+        var moonIcon = new TextBlock
+        {
+            Text = "\uE708",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            FontWeight = FontWeights.Bold,
+            Foreground = _isDarkMode ? Brush("#0F172A") : Brush("#94A3B8"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var columnsGrid = new Grid();
+        columnsGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        columnsGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        
+        Grid.SetColumn(sunIcon, 0);
+        Grid.SetColumn(moonIcon, 1);
+        columnsGrid.Children.Add(sunIcon);
+        columnsGrid.Children.Add(moonIcon);
+        columnsGrid.IsHitTestVisible = false;
+
+        toggleGrid.Children.Add(columnsGrid);
+        toggle.Child = toggleGrid;
+        
+        toggle.MouseLeftButtonUp += (s, e) =>
+        {
+            var targetX = _isDarkMode ? 0 : 40;
+            var anim = new DoubleAnimation
+            {
+                To = targetX,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            
+            anim.Completed += (sender, args) =>
+            {
+                _isDarkMode = !_isDarkMode;
+                if (activeSection == "ROUTE")
+                {
+                    RenderDetail(_currentRouteId);
+                }
+                else
+                {
+                    RenderDashboard();
+                }
+            };
+            
+            translate.BeginAnimation(TranslateTransform.XProperty, anim);
+        };
+        right.Children.Add(toggle);
 
         var newPath = Button("+ NEW PATH", PrimaryBrush(), Brushes.White);
         newPath.Width = 128;
@@ -901,95 +208,6 @@ public partial class MainWindow : Window
         dock.Children.Add(right);
 
         return header;
-    }
-
-    private static LearningRoute NewRoute() =>
-        new()
-        {
-            Title = "",
-            Overview = "",
-            Audience = "Juniors",
-            Level = "Beginners",
-            Modules =
-            [
-                new LearningModule
-                {
-                    Title = "",
-                    Sources =
-                    [
-                        new LearningSource { Kind = SourceKind.Link }
-                    ]
-                }
-            ]
-        };
-
-    private static LearningRoute CloneRoute(LearningRoute route) =>
-        new()
-        {
-            Id = route.Id,
-            Title = route.Title,
-            Overview = route.Overview,
-            Audience = route.Audience,
-            Level = route.Level,
-            Modules = route.Modules.Select(module => new LearningModule
-            {
-                Id = module.Id,
-                RouteId = module.RouteId,
-                Title = module.Title,
-                SortOrder = module.SortOrder,
-                Sources = module.Sources.Select(source => new LearningSource
-                {
-                    Id = source.Id,
-                    ModuleId = source.ModuleId,
-                    Title = source.Title,
-                    Location = source.Location,
-                    Kind = source.Kind,
-                    IsCompleted = source.IsCompleted,
-                    SortOrder = source.SortOrder
-                }).ToList()
-            }).ToList()
-        };
-
-    private static void MoveItem<T>(IList<T> items, T item, int targetIndex)
-    {
-        var oldIndex = items.IndexOf(item);
-        if (oldIndex < 0 || targetIndex < 0 || oldIndex == targetIndex)
-        {
-            return;
-        }
-
-        items.RemoveAt(oldIndex);
-        if (targetIndex > oldIndex)
-        {
-            targetIndex--;
-        }
-        items.Insert(Math.Min(targetIndex, items.Count), item);
-    }
-
-    private static void StartModuleDrag(Border card, MouseEventArgs args)
-    {
-        if (args.LeftButton == MouseButtonState.Pressed && card.Tag is LearningModule module)
-        {
-            DragDrop.DoDragDrop(card, module, DragDropEffects.Move);
-        }
-    }
-
-    private static void StartSourceDrag(Border card, MouseEventArgs args)
-    {
-        if (args.LeftButton == MouseButtonState.Pressed && card.Tag is LearningSource source)
-        {
-            DragDrop.DoDragDrop(card, source, DragDropEffects.Move);
-        }
-    }
-
-    private static void OpenSource(string location)
-    {
-        if (string.IsNullOrWhiteSpace(location))
-        {
-            return;
-        }
-
-        Process.Start(new ProcessStartInfo(location) { UseShellExecute = true });
     }
 
     private static ControlTemplate CreateButtonTemplate(CornerRadius cornerRadius)
